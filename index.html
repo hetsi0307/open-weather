@@ -1,736 +1,492 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather App with Map</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weather Map — iOS Glass Style</title>
 
-        body {
-            font-family: 'Arial', sans-serif;
-            height: 100vh;
-            overflow: hidden;
-            position: relative;
-        }
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 
-        /* Map background */
-        #map {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
+  <style>
+    /* ---------- Base ---------- */
+    :root{
+      --glass-bg: rgba(255,255,255,0.75);
+      --glass-border: rgba(255,255,255,0.45);
+      --accent-1: #66b2ff;
+      --accent-2: #1e90ff;
+      --accent-3: #00c49a;
+      --muted: #69707a;
+      --card-radius: 22px;
+      --shadow-1: 0 10px 30px rgba(16,24,40,0.12);
+      --glass-glow: 0 6px 30px rgba(30,144,255,0.08);
+      --map-overlay-opacity: 0.82;
+    }
 
-        /* Weather overlay */
-        .weather-overlay {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 1000;
-            width: 90%;
-            max-width: 450px;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(15px);
-            padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.3);
-            animation: slideUp 0.8s ease-out;
-        }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial;}
+    body{background:linear-gradient(180deg,#f6fbff 0%, #f1f7fb 100%); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; overflow:hidden}
 
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translate(-50%, -40%);
-            }
-            to {
-                opacity: 1;
-                transform: translate(-50%, -50%);
-            }
-        }
+    /* ---------- Map ---------- */
+    #map {
+      position:fixed;
+      inset:0;
+      z-index:1;
+      filter: saturate(0.98) contrast(0.98);
+    }
+    .leaflet-container { height:100%; width:100%; }
 
-        h1 {
-            color: #2d3436;
-            margin-bottom: 25px;
-            font-size: 2.2rem;
-            text-align: center;
-            background: linear-gradient(45deg, #74b9ff, #0984e3);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: fadeInDown 1s ease-out;
-        }
+    /* subtle blurred overlay on map edges for more premium look */
+    .map-gradient-top,
+    .map-gradient-bottom {
+      position:fixed; left:0; right:0; height:14vh; z-index:2; pointer-events:none;
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0));
+      mix-blend-mode: lighten;
+    }
+    .map-gradient-bottom { top:auto; bottom:0; transform: rotate(180deg); opacity:0.85 }
 
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+    /* ---------- Floating weather card (iOS Glass) ---------- */
+    .weather-card {
+      position:fixed;
+      right: clamp(18px, 6vw, 48px);
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 999;
+      width: min(460px, 90vw);
+      background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(250,250,250,0.78));
+      border-radius: var(--card-radius);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--shadow-1), var(--glass-glow);
+      padding: 26px;
+      backdrop-filter: blur(18px) saturate(1.05);
+      transition: transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .25s ease;
+      overflow: hidden;
+    }
+    .weather-card:focus-within { transform: translateY(-52%); box-shadow: 0 18px 50px rgba(16,24,40,0.18), 0 8px 30px rgba(30,144,255,0.06); }
 
-        .search-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-            animation: fadeIn 1.2s ease-out;
-        }
+    /* Header */
+    .wc-head {
+      display:flex; align-items:center; gap:12px; margin-bottom:8px;
+    }
+    .app-icon {
+      width:54px; height:54px; border-radius:14px;
+      background: linear-gradient(135deg,var(--accent-1),var(--accent-2));
+      display:flex; align-items:center; justify-content:center; color:white; font-size:22px;
+      box-shadow: 0 6px 18px rgba(30,144,255,0.18), inset 0 -6px 14px rgba(255,255,255,0.06);
+      flex-shrink:0;
+    }
+    .wc-title {
+      font-weight:700; font-size:20px; letter-spacing: -0.3px; color:#153243;
+    }
+    .wc-sub { font-size:12px; color:var(--muted); margin-top:2px; }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
+    /* Search row */
+    .search-row { display:flex; gap:12px; margin-top:12px; align-items:center; }
+    .input-wrap {
+      flex:1; position:relative;
+    }
+    input#cityInput {
+      width:100%; padding:12px 14px 12px 44px; border-radius:14px; border:1px solid rgba(20,30,40,0.06);
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,250,250,0.9));
+      font-size:15px; outline:none; color:#153243; box-shadow: 0 6px 18px rgba(16,24,40,0.04) inset;
+    }
+    .search-icon {
+      position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:0.9;
+      font-size:16px; color:var(--accent-2);
+    }
+    .btn {
+      padding:10px 14px; border-radius:12px; border:none; cursor:pointer; font-weight:600;
+      background: linear-gradient(180deg,var(--accent-1),var(--accent-2)); color:white; box-shadow: 0 8px 20px rgba(30,144,255,0.18);
+    }
+    .btn:active { transform: translateY(1px) }
 
-        #cityInput {
-            flex: 1;
-            padding: 12px 18px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 25px;
-            font-size: 16px;
-            outline: none;
-            transition: all 0.3s ease;
-            background: rgba(255,255,255,0.8);
-            backdrop-filter: blur(10px);
-        }
+    .secondary {
+      background: linear-gradient(180deg,#fff,#f7fbff);
+      border:1px solid rgba(16,24,40,0.06);
+      color:var(--accent-2); box-shadow: none; font-weight:700;
+    }
 
-        #cityInput:focus {
-            border-color: #74b9ff;
-            box-shadow: 0 0 0 3px rgba(116, 185, 255, 0.2);
-            transform: scale(1.02);
-            background: rgba(255,255,255,0.95);
-        }
+    /* Current location button (full width) */
+    .location-btn {
+      display:block; margin:16px 0 4px 0; width:100%; padding:12px; border-radius:14px;
+      background: linear-gradient(90deg,#e8fbf6, rgba(255,255,255,0.9));
+      border:1px solid rgba(0,196,150,0.12); color:var(--accent-3); font-weight:700;
+      box-shadow: 0 6px 20px rgba(0,196,150,0.07);
+    }
 
-        .search-btn, .current-location-btn {
-            padding: 12px 20px;
-            background: linear-gradient(45deg, #74b9ff, #0984e3);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(116, 185, 255, 0.4);
-        }
+    /* Weather main */
+    .weather-main { text-align:center; padding: 18px 4px 8px 4px; }
+    .city-name { font-size:22px; font-weight:700; color:#0f2430; margin-bottom:10px; }
+    .temp-row { display:flex; align-items:center; justify-content:center; gap:18px; }
+    .temp-value { font-size:56px; font-weight:800; color:var(--accent-2); line-height:1; }
+    .temp-unit { font-size:18px; color:var(--muted); margin-top:8px; }
+    .weather-emoji {
+      font-size:46px; width:86px; height:86px; display:flex; align-items:center; justify-content:center;
+      border-radius:18px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(250,250,255,0.6));
+      box-shadow: 0 8px 26px rgba(9,132,227,0.08), inset 0 -6px 12px rgba(255,255,255,0.6);
+    }
+    .condition { font-size:15px; color:var(--muted); margin-top:10px; font-weight:600; }
 
-        .search-btn:hover, .current-location-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(116, 185, 255, 0.5);
-        }
+    /* Details grid */
+    .details-grid { margin-top:18px; display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+    .detail {
+      padding:12px; border-radius:12px; background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(246,251,255,0.7));
+      border:1px solid rgba(16,24,40,0.03); text-align:center;
+    }
+    .detail .label { font-size:12px; color:var(--muted); }
+    .detail .val { margin-top:6px; font-weight:700; color:#0f2430; font-size:16px; }
 
-        .current-location-btn {
-            background: linear-gradient(45deg, #00b894, #00a085);
-            box-shadow: 0 4px 15px rgba(0, 184, 148, 0.4);
-            width: 100%;
-            margin-bottom: 20px;
-        }
+    /* footer small actions */
+    .card-footer { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:18px; }
+    .unit-toggle { display:flex; gap:8px; align-items:center; background:transparent; border-radius:10px; padding:6px; }
+    .unit-toggle button { border:none; background:transparent; padding:6px 10px; font-weight:700; border-radius:10px; cursor:pointer; color:var(--muted); }
+    .unit-toggle button.active { color:var(--accent-2); background:linear-gradient(90deg, rgba(30,144,255,0.08), rgba(30,144,255,0.03)); }
 
-        .current-location-btn:hover {
-            box-shadow: 0 6px 20px rgba(0, 184, 148, 0.5);
-        }
+    /* loading / error */
+    .loading { display:flex; gap:8px; align-items:center; justify-content:center; color:var(--accent-2); font-weight:700; margin-top:12px; }
+    .dot { width:8px; height:8px; border-radius:999px; background:var(--accent-2); opacity:.12; animation: blink 1s infinite; }
+    .dot:nth-child(2){ animation-delay:.15s; opacity:.22 }
+    .dot:nth-child(3){ animation-delay:.3s; opacity:.3 }
+    @keyframes blink { 0%{opacity:.12} 50%{opacity:1} 100%{opacity:.12} }
 
-        .weather-info {
-            display: none;
-            text-align: center;
-            animation: weatherSlideIn 0.6s ease-out;
-        }
+    .error { margin-top:12px; background:linear-gradient(90deg,#ffece9,#fff8f8); border:1px solid rgba(255,110,100,0.1); color:#d0423f; padding:10px; border-radius:10px; text-align:center; font-weight:700; }
 
-        .weather-info.show {
-            display: block;
-        }
+    /* map marker style (tiny floating glass) */
+    .weather-marker {
+      display:flex; align-items:center; justify-content:center; width:54px; height:54px; border-radius:14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,250,255,0.88));
+      border: 2px solid white; box-shadow: 0 8px 26px rgba(16,24,40,0.12);
+      font-size:22px;
+    }
 
-        @keyframes weatherSlideIn {
-            from {
-                opacity: 0;
-                transform: scale(0.8);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
+    /* popup style — match card */
+    .leaflet-popup-content-wrapper { border-radius:14px; box-shadow: var(--shadow-1); border:1px solid var(--glass-border); }
+    .leaflet-popup-content { font-family:inherit; padding:14px; text-align:center; color:#0f2430; }
+    .leaflet-popup-content h3{ margin:0 0 8px 0; font-size:16px; font-weight:800 }
+    .leaflet-popup-content .popup-temp { font-weight:800; color:var(--accent-2); font-size:20px; margin-top:6px; }
 
-        .city-name {
-            font-size: 1.8rem;
-            color: #2d3436;
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
-
-        .temperature {
-            font-size: 3.5rem;
-            color: #0984e3;
-            font-weight: bold;
-            margin: 15px 0;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .condition {
-            font-size: 1.3rem;
-            color: #636e72;
-            margin-bottom: 20px;
-            font-style: italic;
-        }
-
-        .weather-icon {
-            font-size: 3.5rem;
-            margin: 15px 0;
-            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
-        }
-
-        .weather-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 25px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(0,0,0,0.1);
-        }
-
-        .detail-item {
-            background: rgba(116, 185, 255, 0.1);
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(116, 185, 255, 0.2);
-            backdrop-filter: blur(5px);
-        }
-
-        .detail-label {
-            font-size: 0.8rem;
-            color: #636e72;
-            margin-bottom: 5px;
-        }
-
-        .detail-value {
-            font-size: 1.1rem;
-            color: #2d3436;
-            font-weight: bold;
-        }
-
-        .loading {
-            display: none;
-            color: #0984e3;
-            font-size: 1.1rem;
-            margin: 20px 0;
-            text-align: center;
-        }
-
-        .loading.show {
-            display: block;
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(116, 185, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: #74b9ff;
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .error {
-            display: none;
-            background: linear-gradient(45deg, #ff7675, #e84393);
-            color: white;
-            padding: 12px;
-            border-radius: 10px;
-            margin: 20px 0;
-            font-weight: bold;
-            text-align: center;
-            animation: errorShake 0.5s ease-in-out;
-        }
-
-        .error.show {
-            display: block;
-        }
-
-        @keyframes errorShake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
-        }
-
-        /* Map controls positioning */
-        .leaflet-top.leaflet-right {
-            top: 20px;
-            right: 20px;
-        }
-
-        .leaflet-control-zoom {
-            border: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-
-        /* Weather marker */
-        .weather-marker {
-            background: linear-gradient(45deg, #74b9ff, #0984e3);
-            border: 3px solid white;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            animation: markerPulse 2s ease-in-out infinite;
-        }
-
-        @keyframes markerPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-
-        /* Responsive design */
-        @media (max-width: 480px) {
-            .weather-overlay {
-                padding: 20px;
-                margin: 20px;
-                width: calc(100% - 40px);
-            }
-            
-            h1 {
-                font-size: 1.8rem;
-            }
-            
-            .temperature {
-                font-size: 3rem;
-            }
-            
-            .search-container {
-                flex-direction: column;
-            }
-            
-            .weather-details {
-                grid-template-columns: 1fr;
-                gap: 12px;
-            }
-        }
-
-        /* Map fade-in effect */
-        .leaflet-container {
-            animation: mapFadeIn 1.5s ease-out;
-        }
-
-        @keyframes mapFadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-    </style>
+    /* responsive */
+    @media (max-width:840px){
+      .weather-card { right: 8px; left:8px; width: calc(100% - 16px); top: auto; bottom: 6vh; transform: translateY(0); }
+      .map-gradient-top, .map-gradient-bottom { display:none; }
+    }
+  </style>
 </head>
 <body>
-    <!-- Map Background -->
-    <div id="map"></div>
+  <!-- Map -->
+  <div id="map" aria-hidden="false"></div>
+  <div class="map-gradient-top" aria-hidden="true"></div>
+  <div class="map-gradient-bottom" aria-hidden="true"></div>
 
-    <!-- Weather App Overlay -->
-    <div class="weather-overlay">
-        <h1>🌤️ Weather Map</h1>
-        
-        <button class="current-location-btn" onclick="getCurrentLocation()">
-            📍 Use Current Location
-        </button>
-        
-        <div class="search-container">
-            <input 
-                type="text" 
-                id="cityInput" 
-                placeholder="Enter city name (e.g., Vadodara, Ahmedabad)..."
-                maxlength="50"
-            >
-            <button class="search-btn" onclick="getWeather()">Search</button>
-        </div>
-
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            Getting weather data...
-        </div>
-
-        <div class="error" id="error"></div>
-
-        <div class="weather-info" id="weatherInfo">
-            <div class="city-name" id="cityName"></div>
-            <div class="weather-icon" id="weatherIcon"></div>
-            <div class="temperature" id="temperature"></div>
-            <div class="condition" id="condition"></div>
-            
-            <div class="weather-details">
-                <div class="detail-item">
-                    <div class="detail-label">Feels like</div>
-                    <div class="detail-value" id="feelsLike"></div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Humidity</div>
-                    <div class="detail-value" id="humidity"></div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Wind Speed</div>
-                    <div class="detail-value" id="windSpeed"></div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Pressure</div>
-                    <div class="detail-value" id="pressure"></div>
-                </div>
-            </div>
-        </div>
+  <!-- Weather overlay card (iOS glass) -->
+  <section class="weather-card" role="region" aria-label="Weather information">
+    <div class="wc-head" aria-hidden="false">
+      <div class="app-icon" aria-hidden="true">☁️</div>
+      <div>
+        <div class="wc-title">Weather Map</div>
+        <div class="wc-sub">Beautiful glassy view — tap the map or search a city</div>
+      </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script>
-        class WeatherMapApp {
-            constructor() {
-                // Replace with your OpenWeather API key
-                this.apiKey = '4fdf35fd80817e74c068dadcb4efec14';
-                this.baseUrl = 'https://api.openweathermap.org/data/2.5/weather';
-                
-                this.cityInput = document.getElementById('cityInput');
-                this.loading = document.getElementById('loading');
-                this.error = document.getElementById('error');
-                this.weatherInfo = document.getElementById('weatherInfo');
-                
-                this.currentMarker = null;
-                this.map = null;
-                
-                this.init();
-            }
+    <button class="location-btn" id="locBtn" title="Use current location">📍 Use current location</button>
 
-            init() {
-                // Initialize map
-                this.initMap();
-                
-                // Add event listeners
-                this.cityInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        this.getWeather();
-                    }
-                });
+    <div class="search-row" role="search">
+      <div class="input-wrap">
+        <span class="search-icon">🔎</span>
+        <input id="cityInput" placeholder="Search city (e.g., Vadodara) — press Enter" aria-label="Search city" maxlength="60" />
+      </div>
+      <button class="btn" id="searchBtn" title="Search city">Search</button>
+    </div>
 
-                // Focus on input
-                this.cityInput.focus();
+    <div id="loading" class="loading" aria-live="polite" style="display:none;margin-top:12px;">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div style="margin-left:8px">Fetching weather...</div>
+    </div>
 
-                // Check API key
-                if (this.apiKey === 'YOUR_API_KEY_HERE') {
-                    this.showError('Please add your OpenWeather API key to use this app. Get it free from openweathermap.org/api');
-                } else {
-                    // Default to Vadodara, Gujarat
-                    this.getWeatherByCity('Vadodara');
-                }
-            }
+    <div id="error" class="error" style="display:none"></div>
 
-            initMap() {
-                // Initialize map centered on India
-                this.map = L.map('map', {
-                    zoomControl: true,
-                    attributionControl: true
-                }).setView([22.3072, 73.1812], 10); // Vadodara coordinates
+    <div id="weatherInfo" style="display:none">
+      <div class="weather-main">
+        <div class="city-name" id="cityName">City, Country</div>
 
-                // Add tile layer (OpenStreetMap)
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors',
-                    maxZoom: 18
-                }).addTo(this.map);
+        <div class="temp-row">
+          <div class="weather-emoji" id="weatherIcon">🌤️</div>
+          <div style="text-align:left">
+            <div class="temp-value" id="temperature">24°</div>
+            <div class="temp-unit" id="tempUnit">Feels like 25° · Light rain</div>
+          </div>
+        </div>
 
-                // Map click event to get weather for clicked location
-                this.map.on('click', (e) => {
-                    const { lat, lng } = e.latlng;
-                    this.getWeatherByCoords(lat, lng);
-                });
-            }
+        <div class="condition" id="condition">Condition text</div>
+      </div>
 
-            async getWeather() {
-                const city = this.cityInput.value.trim();
-                
-                if (!city) {
-                    this.showError('Please enter a city name');
-                    return;
-                }
+      <div class="details-grid" aria-hidden="false">
+        <div class="detail">
+          <div class="label">Feels like</div>
+          <div class="val" id="feelsLike">—</div>
+        </div>
+        <div class="detail">
+          <div class="label">Humidity</div>
+          <div class="val" id="humidity">—</div>
+        </div>
+        <div class="detail">
+          <div class="label">Wind</div>
+          <div class="val" id="windSpeed">—</div>
+        </div>
+        <div class="detail">
+          <div class="label">Pressure</div>
+          <div class="val" id="pressure">—</div>
+        </div>
+      </div>
 
-                await this.getWeatherByCity(city);
-            }
+      <div class="card-footer">
+        <div class="unit-toggle" role="tablist" aria-label="Units">
+          <button id="metricBtn" class="active" aria-pressed="true">°C</button>
+          <button id="imperialBtn" aria-pressed="false">°F</button>
+        </div>
+        <div style="font-size:13px;color:var(--muted)">Tap map to pick a location</div>
+      </div>
+    </div>
+  </section>
 
-            async getWeatherByCity(city) {
-                if (this.apiKey === 'YOUR_API_KEY_HERE') {
-                    this.showError('API key not configured. Please add your OpenWeather API key.');
-                    return;
-                }
+  <!-- Leaflet JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
-                this.showLoading();
-                this.hideError();
-                this.hideWeatherInfo();
+  <script>
+    // ----------------- App class (cleaner & modular) -----------------
+    class WeatherMapApp {
+      constructor() {
+        // Your OpenWeather API key (replace if needed)
+        this.apiKey = '4fdf35fd80817e74c068dadcb4efec14';
+        this.baseUrl = 'https://api.openweathermap.org/data/2.5/weather';
+        this.units = 'metric'; // 'metric' or 'imperial'
 
-                try {
-                    const response = await fetch(
-                        `${this.baseUrl}?q=${encodeURIComponent(city)}&appid=${this.apiKey}&units=metric`
-                    );
+        // UI refs
+        this.mapEl = document.getElementById('map');
+        this.cityInput = document.getElementById('cityInput');
+        this.searchBtn = document.getElementById('searchBtn');
+        this.locBtn = document.getElementById('locBtn');
+        this.loadingEl = document.getElementById('loading');
+        this.errorEl = document.getElementById('error');
+        this.weatherInfoEl = document.getElementById('weatherInfo');
 
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-                    }
+        this.cityNameEl = document.getElementById('cityName');
+        this.weatherIconEl = document.getElementById('weatherIcon');
+        this.temperatureEl = document.getElementById('temperature');
+        this.tempUnitEl = document.getElementById('tempUnit');
+        this.conditionEl = document.getElementById('condition');
+        this.feelsLikeEl = document.getElementById('feelsLike');
+        this.humidityEl = document.getElementById('humidity');
+        this.windSpeedEl = document.getElementById('windSpeed');
+        this.pressureEl = document.getElementById('pressure');
 
-                    const data = await response.json();
-                    this.displayWeather(data);
-                    this.updateMap(data.coord.lat, data.coord.lon, data);
-                    console.log('Weather data:', data);
+        this.metricBtn = document.getElementById('metricBtn');
+        this.imperialBtn = document.getElementById('imperialBtn');
 
-                } catch (error) {
-                    console.error('Error fetching weather data:', error);
-                    this.showError(this.getErrorMessage(error.message));
-                } finally {
-                    this.hideLoading();
-                }
-            }
+        this.map = null;
+        this.marker = null;
 
-            async getWeatherByCoords(lat, lon) {
-                if (this.apiKey === 'YOUR_API_KEY_HERE') {
-                    this.showError('API key not configured. Please add your OpenWeather API key.');
-                    return;
-                }
+        this.init();
+      }
 
-                this.showLoading();
-                this.hideError();
-                this.hideWeatherInfo();
+      init() {
+        this.initMap();
+        this.bindUI();
+        // show an initial city
+        this.getWeatherByCity('Vadodara');
+      }
 
-                try {
-                    const response = await fetch(
-                        `${this.baseUrl}?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=metric`
-                    );
+      initMap() {
+        this.map = L.map('map', { zoomControl: true }).setView([22.3072, 73.1812], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19
+        }).addTo(this.map);
 
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-                    }
+        // click map => fetch weather for coords
+        this.map.on('click', e => {
+          this.getWeatherByCoords(e.latlng.lat, e.latlng.lng);
+        });
+      }
 
-                    const data = await response.json();
-                    this.displayWeather(data);
-                    this.updateMap(lat, lon, data);
-
-                } catch (error) {
-                    console.error('Error fetching weather data:', error);
-                    this.showError(this.getErrorMessage(error.message));
-                } finally {
-                    this.hideLoading();
-                }
-            }
-
-            updateMap(lat, lon, weatherData) {
-                // Remove existing marker
-                if (this.currentMarker) {
-                    this.map.removeLayer(this.currentMarker);
-                }
-
-                // Zoom to location with smooth animation
-                this.map.flyTo([lat, lon], 12, {
-                    animate: true,
-                    duration: 2 // 2 seconds animation
-                });
-
-                // Create custom marker with weather emoji
-                const weatherEmoji = this.getWeatherEmoji(weatherData.weather[0].main);
-                const customIcon = L.divIcon({
-                    className: 'weather-marker',
-                    html: weatherEmoji,
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 20]
-                });
-
-                // Add new marker
-                this.currentMarker = L.marker([lat, lon], { icon: customIcon })
-                    .addTo(this.map)
-                    .bindPopup(
-                        `<div style="text-align: center; padding: 10px;">
-                            <h3>${weatherData.name}</h3>
-                            <div style="font-size: 2em;">${weatherEmoji}</div>
-                            <div style="font-size: 1.5em; color: #0984e3; font-weight: bold;">
-                                ${Math.round(weatherData.main.temp)}°C
-                            </div>
-                            <div style="color: #636e72; font-style: italic;">
-                                ${weatherData.weather[0].description}
-                            </div>
-                        </div>`,
-                        {
-                            closeButton: false,
-                            autoClose: false
-                        }
-                    );
-
-                // Show popup after a delay
-                setTimeout(() => {
-                    this.currentMarker.openPopup();
-                }, 2500);
-            }
-
-            displayWeather(data) {
-                // Update city name
-                document.getElementById('cityName').textContent = `${data.name}, ${data.sys.country}`;
-                
-                // Update temperature
-                document.getElementById('temperature').textContent = `${Math.round(data.main.temp)}°C`;
-                
-                // Update condition
-                document.getElementById('condition').textContent = 
-                    data.weather[0].description.charAt(0).toUpperCase() + 
-                    data.weather[0].description.slice(1);
-                
-                // Update weather icon
-                document.getElementById('weatherIcon').textContent = this.getWeatherEmoji(data.weather[0].main);
-                
-                // Update details
-                document.getElementById('feelsLike').textContent = `${Math.round(data.main.feels_like)}°C`;
-                document.getElementById('humidity').textContent = `${data.main.humidity}%`;
-                document.getElementById('windSpeed').textContent = `${Math.round(data.wind.speed * 3.6)} km/h`;
-                document.getElementById('pressure').textContent = `${data.main.pressure} hPa`;
-
-                this.showWeatherInfo();
-                
-                // Update input field with the found city name
-                this.cityInput.value = data.name;
-            }
-
-            getWeatherEmoji(condition) {
-                const weatherEmojis = {
-                    'Clear': '☀️',
-                    'Clouds': '☁️',
-                    'Rain': '🌧️',
-                    'Drizzle': '🌦️',
-                    'Thunderstorm': '⛈️',
-                    'Snow': '❄️',
-                    'Mist': '🌫️',
-                    'Smoke': '🌫️',
-                    'Haze': '🌫️',
-                    'Dust': '🌪️',
-                    'Fog': '🌫️',
-                    'Sand': '🌪️',
-                    'Ash': '🌫️',
-                    'Squall': '💨',
-                    'Tornado': '🌪️'
-                };
-                
-                return weatherEmojis[condition] || '🌤️';
-            }
-
-            getErrorMessage(message) {
-                const errorMessages = {
-                    'city not found': 'City not found. Please check the spelling and try again.',
-                    'Invalid API key': 'Invalid API key. Please check your OpenWeather API key.',
-                    'Nothing to geocode': 'Please enter a valid city name.',
-                    'API key exhausted': 'API usage limit exceeded. Please try again later.'
-                };
-
-                for (const [key, value] of Object.entries(errorMessages)) {
-                    if (message.toLowerCase().includes(key.toLowerCase())) {
-                        return value;
-                    }
-                }
-
-                return 'Unable to get weather data. Please try again later.';
-            }
-
-            getCurrentLocation() {
-                if (!navigator.geolocation) {
-                    this.showError('Geolocation is not supported by this browser.');
-                    return;
-                }
-
-                this.showLoading();
-                this.hideError();
-
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const { latitude, longitude } = position.coords;
-                        this.getWeatherByCoords(latitude, longitude);
-                    },
-                    (error) => {
-                        this.hideLoading();
-                        let message = 'Unable to get your location. ';
-                        
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                message += 'Location access denied.';
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                message += 'Location information unavailable.';
-                                break;
-                            case error.TIMEOUT:
-                                message += 'Location request timed out.';
-                                break;
-                            default:
-                                message += 'An unknown error occurred.';
-                                break;
-                        }
-                        
-                        this.showError(message);
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 300000
-                    }
-                );
-            }
-
-            showLoading() {
-                this.loading.classList.add('show');
-            }
-
-            hideLoading() {
-                this.loading.classList.remove('show');
-            }
-
-            showError(message) {
-                this.error.textContent = message;
-                this.error.classList.add('show');
-            }
-
-            hideError() {
-                this.error.classList.remove('show');
-            }
-
-            showWeatherInfo() {
-                this.weatherInfo.classList.add('show');
-            }
-
-            hideWeatherInfo() {
-                this.weatherInfo.classList.remove('show');
-            }
-        }
-
-        // Initialize app
-        let weatherApp;
-
-        document.addEventListener('DOMContentLoaded', function() {
-            weatherApp = new WeatherMapApp();
+      bindUI() {
+        this.searchBtn.addEventListener('click', () => this.getWeather());
+        this.locBtn.addEventListener('click', () => this.getCurrentLocation());
+        this.cityInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') this.getWeather();
         });
 
-        // Global functions for button clicks
-        function getWeather() {
-            if (weatherApp) {
-                weatherApp.getWeather();
-            }
-        }
+        this.metricBtn.addEventListener('click', () => this.setUnit('metric'));
+        this.imperialBtn.addEventListener('click', () => this.setUnit('imperial'));
+      }
 
-        function getCurrentLocation() {
-            if (weatherApp) {
-                weatherApp.getCurrentLocation();
-            }
+      setUnit(u) {
+        if (this.units === u) return;
+        this.units = u;
+        this.metricBtn.classList.toggle('active', u === 'metric');
+        this.imperialBtn.classList.toggle('active', u === 'imperial');
+        this.metricBtn.setAttribute('aria-pressed', u === 'metric');
+        this.imperialBtn.setAttribute('aria-pressed', u === 'imperial');
+
+        // re-fetch current input/city if available
+        const city = this.cityInput.value.trim();
+        if (city) this.getWeatherByCity(city);
+      }
+
+      // show/hide helpers
+      showLoading(){ this.loadingEl.style.display = 'flex'; }
+      hideLoading(){ this.loadingEl.style.display = 'none'; }
+      showError(msg){ this.errorEl.textContent = msg; this.errorEl.style.display = 'block'; }
+      hideError(){ this.errorEl.style.display = 'none'; }
+      showWeather(){ this.weatherInfoEl.style.display = 'block'; }
+      hideWeather(){ this.weatherInfoEl.style.display = 'none'; }
+
+      async getWeather() {
+        const city = this.cityInput.value.trim();
+        if (!city) { this.showError('Please enter a city name.'); return; }
+        await this.getWeatherByCity(city);
+      }
+
+      async getWeatherByCity(city) {
+        if (!this.apiKey) { this.showError('API key missing. Add your OpenWeather key.'); return; }
+        this.hideError(); this.showLoading(); this.hideWeather();
+
+        try {
+          const url = `${this.baseUrl}?q=${encodeURIComponent(city)}&appid=${this.apiKey}&units=${this.units}`;
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            const json = await resp.json().catch(()=>({}));
+            throw new Error(json.message || 'Failed to fetch');
+          }
+          const data = await resp.json();
+          this.renderWeather(data);
+          this.updateMapMarker(data.coord.lat, data.coord.lon, data);
+        } catch (err) {
+          this.showError(this.friendlyError(err.message));
+        } finally {
+          this.hideLoading();
         }
-    </script>
+      }
+
+      async getWeatherByCoords(lat, lon) {
+        if (!this.apiKey) { this.showError('API key missing. Add your OpenWeather key.'); return; }
+        this.hideError(); this.showLoading(); this.hideWeather();
+
+        try {
+          const url = `${this.baseUrl}?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=${this.units}`;
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            const json = await resp.json().catch(()=>({}));
+            throw new Error(json.message || 'Failed to fetch');
+          }
+          const data = await resp.json();
+          this.renderWeather(data);
+          this.updateMapMarker(lat, lon, data);
+          this.cityInput.value = data.name || this.cityInput.value;
+        } catch (err) {
+          this.showError(this.friendlyError(err.message));
+        } finally {
+          this.hideLoading();
+        }
+      }
+
+      friendlyError(msg){
+        const lower = (msg || '').toLowerCase();
+        if (lower.includes('city not found')) return 'City not found — check spelling.';
+        if (lower.includes('invalid api key')) return 'Invalid API key — please check it.';
+        return 'Unable to fetch weather. Try again later.';
+      }
+
+      // Render into card
+      renderWeather(data) {
+        if (!data) return;
+        const temp = Math.round(data.main.temp);
+        const feels = Math.round(data.main.feels_like);
+        const hum = data.main.humidity;
+        const wind = Math.round((data.wind.speed || 0) * (this.units === 'metric' ? 3.6 : 1)); // m/s -> km/h for metric, mph for imperial keep approx
+        const press = data.main.pressure;
+        const cond = data.weather[0].description;
+        const main = data.weather[0].main;
+
+        this.cityNameEl.textContent = `${data.name}, ${data.sys.country}`;
+        this.temperatureEl.textContent = `${temp}°`;
+        this.tempUnitEl.textContent = `Feels like ${feels}° · ${this.capitalize(cond)}`;
+        this.conditionEl.textContent = this.capitalize(cond);
+        this.weatherIconEl.textContent = this.getEmoji(main);
+        this.feelsLikeEl.textContent = `${feels}°`;
+        this.humidityEl.textContent = `${hum}%`;
+        this.windSpeedEl.textContent = this.units === 'metric' ? `${wind} km/h` : `${wind} mph`;
+        this.pressureEl.textContent = `${press} hPa`;
+
+        this.showWeather();
+      }
+
+      updateMapMarker(lat, lon, weatherData) {
+        // remove previous
+        if (this.marker) this.map.removeLayer(this.marker);
+
+        // fly to view
+        this.map.flyTo([lat, lon], Math.max(this.map.getZoom(), 11), { animate: true, duration: 1.6 });
+
+        // marker element (styled)
+        const emoji = this.getEmoji(weatherData.weather[0].main);
+        const el = document.createElement('div');
+        el.className = 'weather-marker';
+        el.innerHTML = `<div style="font-size:22px;">${emoji}</div>`;
+
+        this.marker = L.marker([lat, lon], { icon: L.divIcon({ className: '', html: el.outerHTML, iconSize: [54,54], iconAnchor: [27,27] }) })
+          .addTo(this.map)
+          .bindPopup(`<div style="text-align:center;">
+                        <h3>${weatherData.name}</h3>
+                        <div style="font-size:28px;margin:10px 0">${emoji}</div>
+                        <div class="popup-temp">${Math.round(weatherData.main.temp)}°C</div>
+                        <div style="color:#6b7280;font-style:italic;margin-top:6px;">${this.capitalize(weatherData.weather[0].description)}</div>
+                      </div>`);
+
+        // open popup gently
+        setTimeout(()=>{ if (this.marker) this.marker.openPopup(); }, 650);
+      }
+
+      getEmoji(main) {
+        const map = {
+          Clear: '☀️', Clouds: '☁️', Rain: '🌧️', Drizzle: '🌦️', Thunderstorm: '⛈️',
+          Snow: '❄️', Mist: '🌫️', Haze: '🌫️', Fog: '🌫️', Smoke: '🌫️'
+        };
+        return map[main] || '🌤️';
+      }
+
+      capitalize(s=''){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+      // geolocation
+      getCurrentLocation(){
+        if (!navigator.geolocation) { this.showError('Geolocation not supported'); return; }
+        this.showLoading(); this.hideError();
+        navigator.geolocation.getCurrentPosition(pos=>{
+          this.getWeatherByCoords(pos.coords.latitude, pos.coords.longitude);
+        }, err=>{
+          this.hideLoading();
+          this.showError('Unable to fetch location — permission denied or unavailable.');
+        }, { enableHighAccuracy:true, timeout:10000 });
+      }
+    }
+
+    // ----------------- Init app -----------------
+    let app;
+    document.addEventListener('DOMContentLoaded', ()=> {
+      app = new WeatherMapApp();
+
+      // global small helpers for keyboard accessibility
+      document.addEventListener('keydown', (e)=>{
+        if(e.key === '/' && document.activeElement !== document.getElementById('cityInput')) {
+          e.preventDefault();
+          document.getElementById('cityInput').focus();
+        }
+      });
+    });
+
+    // expose for buttons in markup
+    window.getWeather = () => app && app.getWeather();
+    window.getCurrentLocation = () => app && app.getCurrentLocation();
+  </script>
 </body>
 </html>
